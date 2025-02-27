@@ -1,45 +1,36 @@
 <?php
 session_start();
 
-// Check if the user is logged in
-if (!isset($_SESSION['user'])) {
-    // Redirect to the login page if not logged in
-    header("Location: login.php");
-    exit();
-}
-
 // Ensure the cart is initialized as an array if not already
 if (!isset($_SESSION['cart'])) {
+    $_SESSION['cart'] = [];
+}
+
+// Remove item from cart
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['equipment_id'])) {
+    $equipment_id = $_POST['equipment_id'];
+
+    // Remove the item by filtering it out of the cart array
+    $_SESSION['cart'] = array_filter($_SESSION['cart'], function($item) use ($equipment_id) {
+        return $item['equipment_id'] != $equipment_id;
+    });
+
+    // Reindex array to fix any gaps in the array
+    $_SESSION['cart'] = array_values($_SESSION['cart']);
+}
+
+// Clear the entire cart
+if (isset($_POST['clear_cart'])) {
     $_SESSION['cart'] = [];
 }
 
 // Fetch cart items from the session (safe check to ensure it's an array)
 $cart_items = $_SESSION['cart'];
 
-// Check if the form to add to cart was submitted
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Extract data from the POST request
-    $equipment_id = $_POST['equipment_id'];
-    $name = $_POST['name'];
-    $category = $_POST['category'];
-    $price = $_POST['price'];
-    $image = $_POST['image'];
-
-    // Create an array for the new cart item
-    $cart_item = [
-        'equipment_id' => $equipment_id,
-        'name' => $name,
-        'category' => $category,
-        'price' => $price,
-        'image' => $image
-    ];
-
-    // Add the cart item to the session cart (array)
-    $_SESSION['cart'][] = $cart_item;
-
-    // Optionally, you can redirect the user to the cart page after adding the item
-    header("Location: cart.php");
-    exit();
+// Calculate the total price
+$total_price = 0;
+foreach ($cart_items as $cart_item) {
+    $total_price += $cart_item['price'] * $cart_item['quantity'];
 }
 ?>
 
@@ -73,10 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             justify-content: space-between;
             align-items: center;
             padding: 15px 30px;
-            background-color: rgba(34, 34, 34, 0.8); /* Semi-transparent for background visibility */
+            background-color: rgba(34, 34, 34, 0.8);
             color: white;
-            position: relative;
-            z-index: 10; /* Ensure navbar stays on top */
         }
 
         .navbar .logo {
@@ -90,11 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: white;
             font-size: 16px;
             font-weight: 500;
-            transition: 0.3s;
-        }
-
-        .navbar .nav-links a:hover {
-            color: #ff6600;
         }
 
         /* Cart Page Styles */
@@ -103,8 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flex-direction: column;
             align-items: center;
             padding: 20px;
-            background-color: rgba(255, 255, 255, 0.23); /* Semi-transparent background */
-            border-radius: 15px; /* Rounded corners for the container */
+            background-color: rgba(255, 255, 255, 0.23);
+            border-radius: 15px;
             width: 90%;
             max-width: 1200px;
             margin: 20px auto;
@@ -116,10 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             width: 80%;
             margin: 15px 0;
-            background-color: rgba(255, 255, 255, 0.23); /* Semi-transparent background for cart items */
+            background-color: rgba(255, 255, 255, 0.23);
             padding: 15px;
             border-radius: 10px;
-            box-shadow: 0 6px 12px rgba(247, 243, 243, 0.23);
         }
 
         .cart-item img {
@@ -137,17 +120,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: bold;
         }
 
-        .remove-btn {
+        .remove-btn, .clear-cart-btn {
             background-color:rgb(0, 0, 0);
             color: white;
             padding: 5px 15px;
             border: none;
             border-radius: 25px;
             cursor: pointer;
-            transition: background-color 0.3s;
         }
 
-        .remove-btn:hover {
+        .remove-btn:hover, .clear-cart-btn:hover {
             background-color:rgb(0, 0, 0);
         }
 
@@ -158,14 +140,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #fff;
         }
 
-        /* Add a slight glow effect for better readability */
-        .cart-item h3, .cart-item .price {
-            text-shadow: 1px 1px 3px rgba(255, 255, 255, 0.44);
+        .clear-cart-container {
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-
     <!-- Navbar -->
     <nav class="navbar">
         <div class="logo">FiTFuEL</div>
@@ -178,17 +158,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="cart-container">
         <?php
         if (count($cart_items) > 0) {
-            $total_price = 0;
             foreach ($cart_items as $cart_item) {
-                $total_price += $cart_item['price'];
         ?>
             <div class="cart-item">
                 <img src="<?php echo htmlspecialchars($cart_item['image']); ?>" alt="<?php echo htmlspecialchars($cart_item['name']); ?>">
                 <div class="info">
                     <h3><?php echo htmlspecialchars($cart_item['name']); ?></h3>
-                    <p class="price">₹<?php echo htmlspecialchars($cart_item['price']); ?></p>
+                    <p class="price">₹<?php echo htmlspecialchars($cart_item['price']); ?> x <?php echo $cart_item['quantity']; ?></p>
                 </div>
-                <form method="POST" action="remove_from_cart.php">
+                <form method="POST">
                     <input type="hidden" name="equipment_id" value="<?php echo htmlspecialchars($cart_item['equipment_id']); ?>">
                     <button type="submit" class="remove-btn">Remove</button>
                 </form>
@@ -200,6 +178,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo "<p>Your cart is empty.</p>";
         }
         ?>
+
+        <!-- Clear Cart Button -->
+        <div class="clear-cart-container">
+            <?php if (count($cart_items) > 0) { ?>
+                <form method="POST">
+                    <button type="submit" name="clear_cart" class="clear-cart-btn">Clear Cart</button>
+                </form>
+            <?php } ?>
+        </div>
     </div>
 
 </body>
